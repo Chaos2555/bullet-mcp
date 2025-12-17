@@ -7,9 +7,12 @@ import type {
   BulletConfig,
   BulletInput,
   BulletItem,
+  BulletSection,
+  Context,
   ContextFit,
   Grade,
   RuleScore,
+  SectionScore,
   Severity,
   ValidationIssue,
 } from './types.js';
@@ -161,63 +164,15 @@ export class BulletServer {
   }> {
     try {
       const bulletInput = this.validateInput(input);
-      const context = bulletInput.context || 'document';
+      const globalContext: Context = bulletInput.context || 'document';
 
-      // Run all validators
-      const scores: RuleScore[] = [
-        this.validateListLength(bulletInput.items),
-        this.validateHierarchy(bulletInput.items),
-        this.validateLineLength(bulletInput.items),
-        this.validateSerialPosition(bulletInput.items),
-        this.validateStructure(bulletInput.items),
-        this.validateFirstWords(bulletInput.items),
-        this.validateFormatting(bulletInput.items),
-      ];
+      // Detect mode: flat (items) vs sectioned (sections)
+      if (bulletInput.sections && bulletInput.sections.length > 0) {
+        return this.analyzeSections(bulletInput.sections, globalContext);
+      }
 
-      // Calculate overall score
-      const totalEarned = scores.reduce((sum, s) => sum + s.earned_points, 0);
-      const overallScore = Math.round((totalEarned / TOTAL_POINTS) * 100);
-
-      // Determine grade
-      const grade = this.calculateGrade(overallScore);
-
-      // Aggregate issues by severity
-      const allIssues = scores.flatMap((s) => s.issues);
-      const errors = allIssues.filter((i) => i.severity === 'error');
-      const warnings = allIssues.filter((i) => i.severity === 'warning');
-      const suggestions = allIssues.filter((i) => i.severity === 'suggestion');
-
-      // Context analysis
-      const contextAnalysis = this.analyzeContext(bulletInput.items, context);
-
-      // Build analysis result
-      const analysis: BulletAnalysis = {
-        overall_score: overallScore,
-        grade,
-        scores: this.config.validation.enableResearchCitations
-          ? scores
-          : scores.map((s) => ({
-              ...s,
-              issues: s.issues.map((i) => {
-                const { research_basis, ...rest } = i;
-                return rest;
-              }),
-            })),
-        errors,
-        warnings,
-        suggestions,
-        summary: this.generateSummary(overallScore, errors.length, warnings.length),
-        top_improvements: this.getTopImprovements(allIssues),
-        item_count: bulletInput.items.length,
-        max_depth: this.calculateMaxDepth(bulletInput.items),
-        avg_line_length: this.calculateAvgLineLength(bulletInput.items),
-        context_fit: contextAnalysis.fit,
-        context_feedback: contextAnalysis.feedback,
-      };
-
-      return {
-        content: [{ type: 'text', text: JSON.stringify(analysis, null, 2) }],
-      };
+      // Flat mode - original behavior
+      return this.analyzeFlat(bulletInput.items!, globalContext);
     } catch (error) {
       return {
         content: [
@@ -226,7 +181,7 @@ export class BulletServer {
             text: JSON.stringify(
               {
                 error: error instanceof Error ? error.message : String(error),
-                hint: 'Provide items as an array of {text: string, children?: [...], importance?: "high"|"medium"|"low"} objects',
+                hint: 'Provide "items" (flat mode) or "sections" (sectioned mode). Each item: {text: string, children?: [...], importance?: "high"|"medium"|"low"}',
               },
               null,
               2
@@ -235,6 +190,261 @@ export class BulletServer {
         ],
         isError: true,
       };
+    }
+  }
+
+  /**
+   * Analyze flat bullet list (original mode)
+   */
+  private analyzeFlat(
+    items: BulletItem[],
+    context: Context
+  ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+    // Run all validators
+    const scores: RuleScore[] = [
+      this.validateListLength(items),
+      this.validateHierarchy(items),
+      this.validateLineLength(items),
+      this.validateSerialPosition(items),
+      this.validateStructure(items),
+      this.validateFirstWords(items),
+      this.validateFormatting(items),
+    ];
+
+    // Calculate overall score
+    const totalEarned = scores.reduce((sum, s) => sum + s.earned_points, 0);
+    const overallScore = Math.round((totalEarned / TOTAL_POINTS) * 100);
+
+    // Determine grade
+    const grade = this.calculateGrade(overallScore);
+
+    // Aggregate issues by severity
+    const allIssues = scores.flatMap((s) => s.issues);
+    let errors = allIssues.filter((i) => i.severity === 'error');
+    let warnings = allIssues.filter((i) => i.severity === 'warning');
+    const suggestions = allIssues.filter((i) => i.severity === 'suggestion');
+
+    if (this.config.validation.strictMode) {
+      errors = [...errors, ...warnings.map((w) => ({ ...w, severity: 'error' as const }))];
+      warnings = [];
+    }
+
+    // Context analysis
+    const contextAnalysis = this.analyzeContext(items, context);
+
+    // Build analysis result
+    const analysis: BulletAnalysis = {
+      overall_score: overallScore,
+      grade,
+      scores: this.config.validation.enableResearchCitations
+        ? scores
+        : scores.map((s) => ({
+            ...s,
+            issues: s.issues.map((i) => {
+              const { research_basis, ...rest } = i;
+              return rest;
+            }),
+          })),
+      errors,
+      warnings,
+      suggestions,
+      summary: this.generateSummary(overallScore, errors.length, warnings.length),
+      top_improvements: this.getTopImprovements(allIssues),
+      item_count: items.length,
+      max_depth: this.calculateMaxDepth(items),
+      avg_line_length: this.calculateAvgLineLength(items),
+      context_fit: contextAnalysis.fit,
+      context_feedback: contextAnalysis.feedback,
+    };
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify(analysis, null, 2) }],
+    };
+  }
+
+  /**
+   * Analyze sectioned bullet lists (new mode for long documents)
+   */
+  private analyzeSections(
+    sections: BulletSection[],
+    globalContext: Context
+  ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+    const sectionScores: SectionScore[] = [];
+    const allRuleScores: RuleScore[] = [];
+    let totalItems = 0;
+    let allMaxDepth = 1;
+    const allLengths: number[] = [];
+
+    // Aggregate all issues
+    let allErrors: ValidationIssue[] = [];
+    let allWarnings: ValidationIssue[] = [];
+    let allSuggestions: ValidationIssue[] = [];
+
+    // Analyze each section
+    for (const section of sections) {
+      const sectionContext = section.context || globalContext;
+
+      // Run validators for this section
+      const scores: RuleScore[] = [
+        this.validateListLength(section.items),
+        this.validateHierarchy(section.items),
+        this.validateLineLength(section.items),
+        this.validateSerialPosition(section.items),
+        this.validateStructure(section.items),
+        this.validateFirstWords(section.items),
+        this.validateFormatting(section.items),
+      ];
+
+      // Add section prefix to issue messages
+      const prefixedScores = scores.map((score) => ({
+        ...score,
+        issues: score.issues.map((issue) => ({
+          ...issue,
+          message: `[${section.title}] ${issue.message}`,
+        })),
+      }));
+
+      allRuleScores.push(...prefixedScores);
+
+      // Calculate section score
+      const totalEarned = scores.reduce((sum, s) => sum + s.earned_points, 0);
+      const sectionScore = Math.round((totalEarned / TOTAL_POINTS) * 100);
+      const sectionGrade = this.calculateGrade(sectionScore);
+
+      // Aggregate section issues
+      const sectionIssues = prefixedScores.flatMap((s) => s.issues);
+
+      sectionScores.push({
+        title: section.title,
+        score: sectionScore,
+        grade: sectionGrade,
+        item_count: section.items.length,
+        issues: sectionIssues,
+        context: sectionContext,
+      });
+
+      // Collect for overall aggregation
+      totalItems += section.items.length;
+      allMaxDepth = Math.max(allMaxDepth, this.calculateMaxDepth(section.items));
+      this.collectLengths(section.items, allLengths);
+
+      // Aggregate issues by severity
+      allErrors.push(...sectionIssues.filter((i) => i.severity === 'error'));
+      allWarnings.push(...sectionIssues.filter((i) => i.severity === 'warning'));
+      allSuggestions.push(...sectionIssues.filter((i) => i.severity === 'suggestion'));
+    }
+
+    // Apply strict mode if enabled
+    if (this.config.validation.strictMode) {
+      allErrors = [...allErrors, ...allWarnings.map((w) => ({ ...w, severity: 'error' as const }))];
+      allWarnings = [];
+    }
+
+    // Calculate overall score (average of section scores)
+    const overallScore = Math.round(
+      sectionScores.reduce((sum, s) => sum + s.score, 0) / sectionScores.length
+    );
+    const grade = this.calculateGrade(overallScore);
+
+    // Aggregate rule scores by rule
+    const aggregatedScores = this.aggregateRuleScores(allRuleScores);
+
+    // Context analysis for the dominant context
+    const contextAnalysis = this.analyzeContext(
+      sections.flatMap((s) => s.items),
+      globalContext
+    );
+
+    // Build analysis result
+    const analysis: BulletAnalysis = {
+      overall_score: overallScore,
+      grade,
+      scores: this.config.validation.enableResearchCitations
+        ? aggregatedScores
+        : aggregatedScores.map((s) => ({
+            ...s,
+            issues: s.issues.map((i) => {
+              const { research_basis, ...rest } = i;
+              return rest;
+            }),
+          })),
+      errors: allErrors,
+      warnings: allWarnings,
+      suggestions: allSuggestions,
+      summary: this.generateSectionedSummary(overallScore, sections.length, sectionScores),
+      top_improvements: this.getTopImprovements([...allErrors, ...allWarnings, ...allSuggestions]),
+      item_count: totalItems,
+      max_depth: allMaxDepth,
+      avg_line_length: allLengths.length > 0 ? Math.round(allLengths.reduce((a, b) => a + b, 0) / allLengths.length) : 0,
+      context_fit: contextAnalysis.fit,
+      context_feedback: contextAnalysis.feedback,
+      section_scores: sectionScores,
+    };
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify(analysis, null, 2) }],
+    };
+  }
+
+  /**
+   * Collect text lengths from items recursively
+   */
+  private collectLengths(items: BulletItem[], lengths: number[]): void {
+    for (const item of items) {
+      lengths.push(item.text.length);
+      if (item.children) {
+        this.collectLengths(item.children, lengths);
+      }
+    }
+  }
+
+  /**
+   * Aggregate rule scores from multiple sections
+   */
+  private aggregateRuleScores(allScores: RuleScore[]): RuleScore[] {
+    const byRule = new Map<string, RuleScore[]>();
+
+    for (const score of allScores) {
+      if (!byRule.has(score.rule)) {
+        byRule.set(score.rule, []);
+      }
+      byRule.get(score.rule)!.push(score);
+    }
+
+    const aggregated: RuleScore[] = [];
+    for (const [rule, scores] of byRule) {
+      const totalMax = scores.reduce((sum, s) => sum + s.max_points, 0);
+      const totalEarned = scores.reduce((sum, s) => sum + s.earned_points, 0);
+      const allIssues = scores.flatMap((s) => s.issues);
+
+      aggregated.push({
+        rule,
+        max_points: Math.round(totalMax / scores.length), // Average max per section
+        earned_points: Math.round(totalEarned / scores.length), // Average earned per section
+        issues: allIssues,
+      });
+    }
+
+    return aggregated;
+  }
+
+  /**
+   * Generate summary for sectioned analysis
+   */
+  private generateSectionedSummary(
+    overallScore: number,
+    sectionCount: number,
+    sectionScores: SectionScore[]
+  ): string {
+    const bestSection = sectionScores.reduce((best, s) => (s.score > best.score ? s : best));
+    const worstSection = sectionScores.reduce((worst, s) => (s.score < worst.score ? s : worst));
+
+    if (overallScore >= 90) {
+      return `Excellent structured summary across ${sectionCount} sections. All sections follow evidence-based best practices.`;
+    } else if (overallScore >= 80) {
+      return `Good structured summary across ${sectionCount} sections. Best: "${bestSection.title}" (${bestSection.score}), needs work: "${worstSection.title}" (${worstSection.score}).`;
+    } else {
+      return `Structured summary with ${sectionCount} sections needs improvement. Focus on "${worstSection.title}" (score: ${worstSection.score}).`;
     }
   }
 
@@ -248,26 +458,67 @@ export class BulletServer {
 
     const obj = input as Record<string, unknown>;
 
-    if (!obj.items || !Array.isArray(obj.items)) {
-      throw new Error('Missing required field: items (array of bullet items)');
+    // Check for either items or sections (but not both)
+    const hasItems = obj.items && Array.isArray(obj.items);
+    const hasSections = obj.sections && Array.isArray(obj.sections);
+
+    if (!hasItems && !hasSections) {
+      throw new Error('Must provide either "items" (flat mode) or "sections" (sectioned mode)');
     }
 
-    if (obj.items.length === 0) {
-      throw new Error('Items array cannot be empty');
+    if (hasItems && hasSections) {
+      throw new Error('Cannot use both "items" and "sections" - choose one mode');
     }
 
-    // Validate each item has text
-    for (let i = 0; i < obj.items.length; i++) {
-      const item = obj.items[i] as Record<string, unknown>;
-      if (!item || typeof item !== 'object') {
-        throw new Error(`Item at index ${i} must be an object`);
+    if (hasItems) {
+      // Flat mode validation
+      if ((obj.items as unknown[]).length === 0) {
+        throw new Error('Items array cannot be empty');
       }
-      if (typeof item.text !== 'string' || item.text.trim().length === 0) {
-        throw new Error(`Item at index ${i} must have non-empty text property`);
+      this.validateItemsArray(obj.items as unknown[], 'items');
+    }
+
+    if (hasSections) {
+      // Sectioned mode validation
+      const sections = obj.sections as unknown[];
+      if (sections.length === 0) {
+        throw new Error('Sections array cannot be empty');
+      }
+
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i] as Record<string, unknown>;
+        if (!section || typeof section !== 'object') {
+          throw new Error(`Section at index ${i} must be an object`);
+        }
+        if (typeof section.title !== 'string' || section.title.trim().length === 0) {
+          throw new Error(`Section at index ${i} must have a non-empty title`);
+        }
+        if (!section.items || !Array.isArray(section.items)) {
+          throw new Error(`Section "${section.title}" must have an items array`);
+        }
+        if ((section.items as unknown[]).length === 0) {
+          throw new Error(`Section "${section.title}" cannot have empty items array`);
+        }
+        this.validateItemsArray(section.items as unknown[], `section "${section.title}"`);
       }
     }
 
     return obj as unknown as BulletInput;
+  }
+
+  /**
+   * Validate an array of bullet items
+   */
+  private validateItemsArray(items: unknown[], location: string): void {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i] as Record<string, unknown>;
+      if (!item || typeof item !== 'object') {
+        throw new Error(`Item at index ${i} in ${location} must be an object`);
+      }
+      if (typeof item.text !== 'string' || item.text.trim().length === 0) {
+        throw new Error(`Item at index ${i} in ${location} must have non-empty text property`);
+      }
+    }
   }
 
   // ===========================================================================
@@ -486,7 +737,7 @@ export class BulletServer {
     const dominantPattern = this.getMostCommon(patterns);
 
     patterns.forEach((pattern, index) => {
-      if (pattern !== 'unknown' && pattern !== dominantPattern && dominantPattern !== 'unknown') {
+      if (dominantPattern && pattern !== 'unknown' && pattern !== dominantPattern && dominantPattern !== 'unknown') {
         issues.push({
           rule: 'STRUCTURE',
           severity: 'warning',
@@ -572,8 +823,8 @@ export class BulletServer {
     });
 
     const dominantEnd = this.getMostCommon(endChars);
-    const inconsistentEnds = endChars.filter((e) => e !== dominantEnd).length;
-    if (inconsistentEnds > 0 && inconsistentEnds < endChars.length) {
+    const inconsistentEnds = dominantEnd ? endChars.filter((e) => e !== dominantEnd).length : 0;
+    if (dominantEnd && inconsistentEnds > 0 && inconsistentEnds < endChars.length) {
       issues.push({
         rule: 'FORMATTING',
         severity: 'suggestion',
@@ -594,8 +845,8 @@ export class BulletServer {
     });
 
     const dominantCap = this.getMostCommon(capitalizations);
-    const inconsistentCaps = capitalizations.filter((c) => c !== dominantCap).length;
-    if (inconsistentCaps > 0 && inconsistentCaps < capitalizations.length) {
+    const inconsistentCaps = dominantCap ? capitalizations.filter((c) => c !== dominantCap).length : 0;
+    if (dominantCap && inconsistentCaps > 0 && inconsistentCaps < capitalizations.length) {
       issues.push({
         rule: 'FORMATTING',
         severity: 'suggestion',
@@ -636,7 +887,13 @@ export class BulletServer {
     }
 
     // Check for gerunds (-ing)
-    if (firstWord.endsWith('ing') && firstWord.length > 4) {
+    // Exclude common non-gerund -ing words
+    const nonGerunds = new Set([
+      'king', 'ring', 'thing', 'string', 'spring', 'swing', 'bring', 'sing',
+      'bling', 'fling', 'sling', 'sting', 'wing', 'cling', 'wring',
+      'anything', 'everything', 'nothing', 'something',
+    ]);
+    if (firstWord.endsWith('ing') && firstWord.length > 4 && !nonGerunds.has(firstWord)) {
       return 'verb-gerund';
     }
 
@@ -665,8 +922,13 @@ export class BulletServer {
 
   /**
    * Get the most common element in an array
+   * Returns undefined for empty arrays (caller must handle)
    */
-  private getMostCommon<T>(arr: T[]): T {
+  private getMostCommon<T>(arr: T[]): T | undefined {
+    if (arr.length === 0) {
+      return undefined;
+    }
+
     const counts = new Map<T, number>();
     arr.forEach((item) => {
       counts.set(item, (counts.get(item) || 0) + 1);
@@ -775,13 +1037,29 @@ export class BulletServer {
    */
   private analyzeContext(
     items: BulletItem[],
-    context: string
+    context: Context
   ): { fit: ContextFit; feedback?: string } {
     if (context === 'presentation') {
       return {
         fit: 'poor',
         feedback:
           '3M research shows presentations are 43% more persuasive with visuals instead of bullets. Consider using graphics with narration.',
+      };
+    }
+
+    if (context === 'reference') {
+      // Reference materials benefit from clear hierarchy and findability
+      const maxDepth = this.calculateMaxDepth(items);
+      if (maxDepth === 1 && items.length > 5) {
+        return {
+          fit: 'good',
+          feedback:
+            'For reference materials, consider using hierarchy (sub-bullets) to group related items for faster lookup.',
+        };
+      }
+      return {
+        fit: 'excellent',
+        feedback: 'Well-structured for reference use. Ensure consistent formatting for quick scanning.',
       };
     }
 
