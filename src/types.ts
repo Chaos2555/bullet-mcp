@@ -27,6 +27,10 @@ export type Context = 'document' | 'presentation' | 'reference';
 export interface BulletSection {
   /** Section title/heading */
   title: string;
+  /** Brief summary or context for this section */
+  description?: string;
+  /** Introductory phrase before the section bullets */
+  intro?: string;
   /** Bullet items in this section */
   items: BulletItem[];
   /** Optional context override for this section */
@@ -37,6 +41,12 @@ export interface BulletSection {
  * Input to the bullet tool - supports flat items OR sections (mutually exclusive)
  */
 export interface BulletInput {
+  /** Title/heading for the bullet list */
+  title?: string;
+  /** Brief summary or context about what the bullets cover */
+  description?: string;
+  /** Introductory phrase before the bullets */
+  intro?: string;
   /** Array of bullet items to validate (flat mode) */
   items?: BulletItem[];
   /** Grouped sections for long documents (sectioned mode) */
@@ -100,6 +110,10 @@ export type ContextFit = 'excellent' | 'good' | 'poor';
 export interface SectionScore {
   /** Section title */
   title: string;
+  /** Brief summary or context for this section */
+  description?: string;
+  /** Introductory phrase before the section bullets */
+  intro?: string;
   /** Section score (0-100) */
   score: number;
   /** Section letter grade */
@@ -113,9 +127,29 @@ export interface SectionScore {
 }
 
 /**
+ * Structured bullet list with title, description, intro, and items
+ */
+export interface StructuredBulletList {
+  /** Title for the bullet list section */
+  title: string;
+  /** Brief description/summary of what follows */
+  description: string;
+  /** Introductory phrase before the items */
+  intro: string;
+  /** The actual bullet items */
+  items: string[];
+}
+
+/**
  * Complete analysis result returned by the bullet tool
  */
 export interface BulletAnalysis {
+  /** Title/heading for the bullet list (echoed from input) */
+  title?: string;
+  /** Brief summary or context (echoed from input) */
+  description?: string;
+  /** Introductory phrase (echoed from input) */
+  intro?: string;
   /** Overall score from 0-100 */
   overall_score: number;
   /** Letter grade */
@@ -131,7 +165,7 @@ export interface BulletAnalysis {
   /** Brief summary of the analysis */
   summary: string;
   /** Top 3 most impactful improvements to make */
-  top_improvements: string[];
+  top_improvements: StructuredBulletList;
   /** Number of bullet items analyzed */
   item_count: number;
   /** Maximum nesting depth found */
