@@ -1,0 +1,46 @@
+{
+  "name": "bullet-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for evidence-based bullet point summarization guidance",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "bullet-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "start": "node dist/index.js",
+    "dev": "npx @modelcontextprotocol/inspector dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "bullet-points",
+    "summarization",
+    "cognitive-science",
+    "llm",
+    "ai"
+  ],
+  "author": {
+    "name": "Nikko Gonzales",
+    "email": "nikkoxgonzales@gmail.com"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.17.3",
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}
