@@ -8,6 +8,7 @@ MCP server for evidence-based bullet point summarization guidance. Validates and
 - **Letter grades** (A/B/C/D/F) with actionable feedback
 - **Research citations** for each validation rule
 - **Context awareness** (document, presentation, reference)
+- **Sections support** for long documents with multiple chapters/topics
 
 ## Installation
 
@@ -66,6 +67,49 @@ Validates bullet point lists against evidence-based cognitive research.
   "errors": [],
   "warnings": [],
   "suggestions": [...]
+}
+```
+
+### Sectioned Mode (for long documents)
+
+For long documents with multiple chapters or topics, use the `sections` format. Each section is validated separately (3-7 items per section), allowing unlimited total content.
+
+**Input:**
+```json
+{
+  "sections": [
+    {
+      "title": "Chapter 1: Introduction",
+      "items": [
+        { "text": "Define the problem scope and context" },
+        { "text": "Outline key objectives and goals" },
+        { "text": "Summarize the main approach taken" }
+      ]
+    },
+    {
+      "title": "Chapter 2: Methods",
+      "items": [
+        { "text": "Describe data collection procedures" },
+        { "text": "Explain analysis methodology used" },
+        { "text": "Detail validation steps performed" }
+      ],
+      "context": "reference"
+    }
+  ],
+  "context": "document"
+}
+```
+
+**Output includes per-section breakdown:**
+```json
+{
+  "overall_score": 95,
+  "grade": "A",
+  "section_scores": [
+    { "title": "Chapter 1: Introduction", "score": 96, "grade": "A", "item_count": 3 },
+    { "title": "Chapter 2: Methods", "score": 94, "grade": "A", "item_count": 3 }
+  ],
+  "summary": "Excellent structured summary across 2 sections."
 }
 ```
 
