@@ -18,6 +18,32 @@ const createItems = (count: number, textFn?: (i: number) => string): BulletItem[
   }));
 };
 
+// Required fields for all inputs
+const REQUIRED_FIELDS = {
+  title: 'Test Title',
+  description: 'Test description for the bullet list',
+  intro: 'Here are the items:',
+};
+
+// Helper to create valid input with required fields
+const createInput = (overrides: Record<string, unknown> = {}) => ({
+  ...REQUIRED_FIELDS,
+  ...overrides,
+});
+
+// Helper to create a section with required fields
+const createSection = (
+  title: string,
+  items: BulletItem[],
+  overrides: Record<string, unknown> = {}
+) => ({
+  title,
+  description: `Description for ${title}`,
+  intro: `Items in ${title}:`,
+  items,
+  ...overrides,
+});
+
 // Helper to parse analysis result
 const parseResult = async (server: BulletServer, input: unknown) => {
   const result = await server.analyze(input);
@@ -70,9 +96,9 @@ describe('BulletServer', () => {
     });
 
     it('should accept valid input', async () => {
-      const result = await server.analyze({
-        items: [{ text: 'Valid bullet point text here' }],
-      });
+      const result = await server.analyze(
+        createInput({ items: [{ text: 'Valid bullet point text here' }] })
+      );
       expect(result.isError).toBeUndefined();
     });
   });
@@ -83,48 +109,48 @@ describe('BulletServer', () => {
 
   describe('List Length Validation', () => {
     it('should give suggestion for 1 item (too sparse)', async () => {
-      const analysis = await parseResult(server, { items: createItems(1) });
+      const analysis = await parseResult(server, createInput({ items: createItems(1) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(1);
       expect(listLengthScore.issues[0].severity).toBe('suggestion');
     });
 
     it('should give suggestion for 2 items (below minimum)', async () => {
-      const analysis = await parseResult(server, { items: createItems(2) });
+      const analysis = await parseResult(server, createInput({ items: createItems(2) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(1);
       expect(listLengthScore.issues[0].severity).toBe('suggestion');
     });
 
     it('should pass for 3 items (minimum)', async () => {
-      const analysis = await parseResult(server, { items: createItems(3) });
+      const analysis = await parseResult(server, createInput({ items: createItems(3) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(0);
       expect(listLengthScore.earned_points).toBe(20);
     });
 
     it('should pass for 5 items (optimal)', async () => {
-      const analysis = await parseResult(server, { items: createItems(5) });
+      const analysis = await parseResult(server, createInput({ items: createItems(5) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(0);
       expect(listLengthScore.earned_points).toBe(20);
     });
 
     it('should pass for 7 items (max recommended)', async () => {
-      const analysis = await parseResult(server, { items: createItems(7) });
+      const analysis = await parseResult(server, createInput({ items: createItems(7) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(0);
     });
 
     it('should give warning for 8 items (above max)', async () => {
-      const analysis = await parseResult(server, { items: createItems(8) });
+      const analysis = await parseResult(server, createInput({ items: createItems(8) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(1);
       expect(listLengthScore.issues[0].severity).toBe('warning');
     });
 
     it('should give error for 10+ items (exceeds hard max)', async () => {
-      const analysis = await parseResult(server, { items: createItems(10) });
+      const analysis = await parseResult(server, createInput({ items: createItems(10) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues).toHaveLength(1);
       expect(listLengthScore.issues[0].severity).toBe('error');
@@ -138,7 +164,7 @@ describe('BulletServer', () => {
 
   describe('Hierarchy Validation', () => {
     it('should pass for flat list (depth 1)', async () => {
-      const analysis = await parseResult(server, { items: createItems(5) });
+      const analysis = await parseResult(server, createInput({ items: createItems(5) }));
       const hierarchyScore = analysis.scores.find((s: any) => s.rule === 'HIERARCHY');
       expect(hierarchyScore.issues).toHaveLength(0);
       expect(hierarchyScore.earned_points).toBe(15);
@@ -153,7 +179,7 @@ describe('BulletServer', () => {
         { text: 'Another parent item with valid length' },
         { text: 'Third parent item with valid length here' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const hierarchyScore = analysis.scores.find((s: any) => s.rule === 'HIERARCHY');
       expect(hierarchyScore.issues).toHaveLength(0);
     });
@@ -172,7 +198,7 @@ describe('BulletServer', () => {
         { text: 'Another item with valid length for test' },
         { text: 'Third item with valid length for testing' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const hierarchyScore = analysis.scores.find((s: any) => s.rule === 'HIERARCHY');
       expect(hierarchyScore.issues).toHaveLength(1);
       expect(hierarchyScore.issues[0].severity).toBe('warning');
@@ -197,7 +223,7 @@ describe('BulletServer', () => {
         { text: 'Another item with valid length for test' },
         { text: 'Third item with valid length for testing' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const hierarchyScore = analysis.scores.find((s: any) => s.rule === 'HIERARCHY');
       expect(hierarchyScore.issues).toHaveLength(1);
       expect(hierarchyScore.issues[0].severity).toBe('error');
@@ -216,7 +242,7 @@ describe('BulletServer', () => {
         { text: 'Another short one' }, // 17 chars
         { text: 'Third short item' }, // 16 chars
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const lineLengthScore = analysis.scores.find((s: any) => s.rule === 'LINE_LENGTH');
       expect(lineLengthScore.issues.length).toBeGreaterThan(0);
       expect(lineLengthScore.issues[0].severity).toBe('suggestion');
@@ -228,7 +254,7 @@ describe('BulletServer', () => {
         { text: 'Another bullet point that falls within the ideal range' }, // 55 chars
         { text: 'Third bullet point also in the optimal character range' }, // 55 chars
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const lineLengthScore = analysis.scores.find((s: any) => s.rule === 'LINE_LENGTH');
       expect(lineLengthScore.issues).toHaveLength(0);
       expect(lineLengthScore.earned_points).toBe(15);
@@ -242,7 +268,7 @@ describe('BulletServer', () => {
         { text: 'Normal length bullet point for comparison here' },
         { text: 'Another normal length bullet point for test' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const lineLengthScore = analysis.scores.find((s: any) => s.rule === 'LINE_LENGTH');
       expect(lineLengthScore.issues.length).toBeGreaterThan(0);
       expect(lineLengthScore.issues[0].severity).toBe('warning');
@@ -262,7 +288,7 @@ describe('BulletServer', () => {
         { text: 'Fourth item with normal importance level' },
         { text: 'Fifth item with normal importance level here' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const positionScore = analysis.scores.find((s: any) => s.rule === 'SERIAL_POSITION');
       const warnings = positionScore.issues.filter((i: any) => i.severity === 'warning');
       expect(warnings).toHaveLength(0);
@@ -276,7 +302,7 @@ describe('BulletServer', () => {
         { text: 'Fourth item with normal importance level' },
         { text: 'Critical item that must be remembered', importance: 'high' as const },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const positionScore = analysis.scores.find((s: any) => s.rule === 'SERIAL_POSITION');
       const warnings = positionScore.issues.filter((i: any) => i.severity === 'warning');
       expect(warnings).toHaveLength(0);
@@ -290,7 +316,7 @@ describe('BulletServer', () => {
         { text: 'Fourth item with normal importance level' },
         { text: 'Fifth item with normal importance level' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const positionScore = analysis.scores.find((s: any) => s.rule === 'SERIAL_POSITION');
       const warnings = positionScore.issues.filter((i: any) => i.severity === 'warning');
       expect(warnings.length).toBeGreaterThan(0);
@@ -308,7 +334,7 @@ describe('BulletServer', () => {
         { text: 'Create parallel structure for scanning' },
         { text: 'Maintain readability with similar forms' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const structureScore = analysis.scores.find((s: any) => s.rule === 'STRUCTURE');
       expect(structureScore.issues).toHaveLength(0);
       expect(structureScore.earned_points).toBe(20);
@@ -320,7 +346,7 @@ describe('BulletServer', () => {
         { text: 'Creating parallel structure for better scanning' },
         { text: 'Maintaining readability with similar forms' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const structureScore = analysis.scores.find((s: any) => s.rule === 'STRUCTURE');
       expect(structureScore.issues).toHaveLength(0);
     });
@@ -331,14 +357,14 @@ describe('BulletServer', () => {
         { text: 'Creating parallel structure for scanning' }, // gerund
         { text: 'The readability is improved with forms' }, // noun-phrase
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const structureScore = analysis.scores.find((s: any) => s.rule === 'STRUCTURE');
       expect(structureScore.issues.length).toBeGreaterThan(0);
     });
 
     it('should skip check for single item', async () => {
       const items = [{ text: 'Single item does not need parallel check' }];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const structureScore = analysis.scores.find((s: any) => s.rule === 'STRUCTURE');
       expect(structureScore.issues).toHaveLength(0);
       expect(structureScore.earned_points).toBe(20);
@@ -356,7 +382,7 @@ describe('BulletServer', () => {
         { text: 'Create parallel structure for scanning' },
         { text: 'Maintain readability with similar forms' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const firstWordsScore = analysis.scores.find((s: any) => s.rule === 'FIRST_WORDS');
       expect(firstWordsScore.issues).toHaveLength(0);
       expect(firstWordsScore.earned_points).toBe(10);
@@ -368,7 +394,7 @@ describe('BulletServer', () => {
         { text: 'Use consistent structure for better scanning' }, // Same first 2 words
         { text: 'Maintain readability with similar text forms' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const firstWordsScore = analysis.scores.find((s: any) => s.rule === 'FIRST_WORDS');
       expect(firstWordsScore.issues.length).toBeGreaterThan(0);
       expect(firstWordsScore.issues[0].severity).toBe('warning');
@@ -380,7 +406,7 @@ describe('BulletServer', () => {
         { text: 'use consistent structure for better scanning' }, // Same first 2 words, different case
         { text: 'Maintain readability with similar text forms' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const firstWordsScore = analysis.scores.find((s: any) => s.rule === 'FIRST_WORDS');
       expect(firstWordsScore.issues.length).toBeGreaterThan(0);
     });
@@ -397,7 +423,7 @@ describe('BulletServer', () => {
         { text: 'Second item also ends with period.' },
         { text: 'Third item follows the same pattern.' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const formattingScore = analysis.scores.find((s: any) => s.rule === 'FORMATTING');
       const punctuationIssues = formattingScore.issues.filter((i: any) =>
         i.message.includes('punctuation')
@@ -411,7 +437,7 @@ describe('BulletServer', () => {
         { text: 'Second item has no period' },
         { text: 'Third item also has period.' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const formattingScore = analysis.scores.find((s: any) => s.rule === 'FORMATTING');
       const punctuationIssues = formattingScore.issues.filter((i: any) =>
         i.message.includes('punctuation')
@@ -425,7 +451,7 @@ describe('BulletServer', () => {
         { text: 'Second item also starts with capital' },
         { text: 'Third item follows the same pattern' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const formattingScore = analysis.scores.find((s: any) => s.rule === 'FORMATTING');
       const capIssues = formattingScore.issues.filter((i: any) =>
         i.message.includes('capitalization')
@@ -439,7 +465,7 @@ describe('BulletServer', () => {
         { text: 'second item starts with lowercase here' },
         { text: 'Third item starts with capital again' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       const formattingScore = analysis.scores.find((s: any) => s.rule === 'FORMATTING');
       const capIssues = formattingScore.issues.filter((i: any) =>
         i.message.includes('capitalization')
@@ -454,18 +480,18 @@ describe('BulletServer', () => {
 
   describe('Context Analysis', () => {
     it('should give excellent fit for document context', async () => {
-      const analysis = await parseResult(server, {
-        items: createItems(5),
-        context: 'document',
-      });
+      const analysis = await parseResult(
+        server,
+        createInput({ items: createItems(5), context: 'document' })
+      );
       expect(analysis.context_fit).toBe('excellent');
     });
 
     it('should give poor fit for presentation context', async () => {
-      const analysis = await parseResult(server, {
-        items: createItems(5),
-        context: 'presentation',
-      });
+      const analysis = await parseResult(
+        server,
+        createInput({ items: createItems(5), context: 'presentation' })
+      );
       expect(analysis.context_fit).toBe('poor');
       expect(analysis.context_feedback).toContain('visuals');
     });
@@ -484,7 +510,7 @@ describe('BulletServer', () => {
         { text: 'Follow research-based formatting guidelines' },
         { text: 'Apply evidence-based design principles here' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       expect(analysis.overall_score).toBeGreaterThanOrEqual(90);
       expect(analysis.grade).toBe('A');
     });
@@ -505,7 +531,7 @@ describe('BulletServer', () => {
         { text: 'Short eleven' },
         { text: 'short twelve' },
       ];
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
       // With 12 items (error), short text, mixed patterns, inconsistent caps
       // Score should be significantly reduced
       expect(analysis.errors.length).toBeGreaterThan(0);
@@ -524,7 +550,7 @@ describe('BulletServer', () => {
         { text: 'Create parallel structure for scanning' },
         { text: '📝 Emoji at the start of this bullet point' },
       ];
-      const result = await server.analyze({ items });
+      const result = await server.analyze(createInput({ items }));
       expect(result.isError).toBeUndefined();
     });
 
@@ -535,7 +561,7 @@ describe('BulletServer', () => {
         { text: 'Normal length bullet point for comparison' },
         { text: 'Another normal length bullet point here' },
       ];
-      const result = await server.analyze({ items });
+      const result = await server.analyze(createInput({ items }));
       expect(result.isError).toBeUndefined();
       const analysis = JSON.parse(result.content[0].text);
       expect(analysis.warnings.length).toBeGreaterThan(0);
@@ -547,7 +573,7 @@ describe('BulletServer', () => {
         { text: 'Item with undefined children', children: undefined },
         { text: 'Normal item without children property' },
       ];
-      const result = await server.analyze({ items });
+      const result = await server.analyze(createInput({ items }));
       expect(result.isError).toBeUndefined();
     });
   });
@@ -563,7 +589,7 @@ describe('BulletServer', () => {
       );
       // 8 items triggers a warning (above 7 max recommended)
       const items = createItems(8);
-      const analysis = await parseResult(strictServer, { items });
+      const analysis = await parseResult(strictServer, createInput({ items }));
 
       // Warning should be promoted to error
       expect(analysis.errors.length).toBeGreaterThan(0);
@@ -575,7 +601,7 @@ describe('BulletServer', () => {
     it('should keep warnings as warnings when strictMode is disabled', async () => {
       // 8 items triggers a warning
       const items = createItems(8);
-      const analysis = await parseResult(server, { items });
+      const analysis = await parseResult(server, createInput({ items }));
 
       expect(analysis.warnings.length).toBeGreaterThan(0);
       expect(analysis.warnings.some((w: any) => w.rule === 'LIST_LENGTH')).toBe(true);
@@ -588,7 +614,7 @@ describe('BulletServer', () => {
 
   describe('Research Citations', () => {
     it('should include research citations by default', async () => {
-      const analysis = await parseResult(server, { items: createItems(10) });
+      const analysis = await parseResult(server, createInput({ items: createItems(10) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues[0].research_basis).toBeDefined();
       expect(listLengthScore.issues[0].research_basis).toContain('Miller');
@@ -598,7 +624,7 @@ describe('BulletServer', () => {
       const serverNoCitations = new BulletServer(
         createConfig({ validation: { strictMode: false, enableResearchCitations: false } })
       );
-      const analysis = await parseResult(serverNoCitations, { items: createItems(10) });
+      const analysis = await parseResult(serverNoCitations, createInput({ items: createItems(10) }));
       const listLengthScore = analysis.scores.find((s: any) => s.rule === 'LIST_LENGTH');
       expect(listLengthScore.issues[0].research_basis).toBeUndefined();
     });
@@ -611,10 +637,12 @@ describe('BulletServer', () => {
   describe('Sections Mode', () => {
     describe('Input Validation', () => {
       it('should reject both items and sections together', async () => {
-        const result = await server.analyze({
-          items: [{ text: 'An item here' }],
-          sections: [{ title: 'Section 1', items: [{ text: 'An item here' }] }],
-        });
+        const result = await server.analyze(
+          createInput({
+            items: [{ text: 'An item here' }],
+            sections: [createSection('Section 1', [{ text: 'An item here' }])],
+          })
+        );
         expect(result.isError).toBe(true);
         const error = JSON.parse(result.content[0].text);
         expect(error.error).toContain('Cannot use both');
@@ -654,44 +682,40 @@ describe('BulletServer', () => {
       });
 
       it('should accept valid sections input', async () => {
-        const result = await server.analyze({
-          sections: [
-            {
-              title: 'Chapter 1',
-              items: [
+        const result = await server.analyze(
+          createInput({
+            sections: [
+              createSection('Chapter 1', [
                 { text: 'First point with good length for reading' },
                 { text: 'Second point with good length for reading' },
                 { text: 'Third point with good length for reading' },
-              ],
-            },
-          ],
-        });
+              ]),
+            ],
+          })
+        );
         expect(result.isError).toBeUndefined();
       });
     });
 
     describe('Basic Sections Analysis', () => {
       it('should analyze multiple sections', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Introduction',
-              items: [
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Introduction', [
                 { text: 'Use consistent grammar throughout the section' },
                 { text: 'Create parallel structure for better scanning' },
                 { text: 'Maintain readability with similar text forms' },
-              ],
-            },
-            {
-              title: 'Methods',
-              items: [
+              ]),
+              createSection('Methods', [
                 { text: 'Apply research-based formatting guidelines' },
                 { text: 'Follow evidence-based design principles here' },
                 { text: 'Implement structured content approaches now' },
-              ],
-            },
-          ],
-        });
+              ]),
+            ],
+          })
+        );
 
         // Should have section_scores
         expect(analysis.section_scores).toBeDefined();
@@ -701,26 +725,23 @@ describe('BulletServer', () => {
       });
 
       it('should calculate overall score as average of sections', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Good Section',
-              items: [
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Good Section', [
                 { text: 'Use consistent grammar throughout the section' },
                 { text: 'Create parallel structure for better scanning' },
                 { text: 'Maintain readability with similar text forms' },
-              ],
-            },
-            {
-              title: 'Another Good Section',
-              items: [
+              ]),
+              createSection('Another Good Section', [
                 { text: 'Apply research-based formatting guidelines' },
                 { text: 'Follow evidence-based design principles here' },
                 { text: 'Implement structured content approaches now' },
-              ],
-            },
-          ],
-        });
+              ]),
+            ],
+          })
+        );
 
         // Both sections should score well
         expect(analysis.section_scores[0].score).toBeGreaterThanOrEqual(80);
@@ -730,25 +751,22 @@ describe('BulletServer', () => {
       });
 
       it('should include total item_count across all sections', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Section 1',
-              items: [
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Section 1', [
                 { text: 'Point one with enough text for validity' },
                 { text: 'Point two with enough text for validity' },
                 { text: 'Point three with enough text for validity' },
-              ],
-            },
-            {
-              title: 'Section 2',
-              items: [
+              ]),
+              createSection('Section 2', [
                 { text: 'Point four with enough text for validity' },
                 { text: 'Point five with enough text for validity' },
-              ],
-            },
-          ],
-        });
+              ]),
+            ],
+          })
+        );
 
         expect(analysis.item_count).toBe(5); // 3 + 2
       });
@@ -757,18 +775,15 @@ describe('BulletServer', () => {
     describe('Per-Section Validation', () => {
       it('should apply 3-7 rule per section, not globally', async () => {
         // 10 items total, but split across 2 sections (5 each) - should pass
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Section 1',
-              items: createItems(5),
-            },
-            {
-              title: 'Section 2',
-              items: createItems(5),
-            },
-          ],
-        });
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Section 1', createItems(5)),
+              createSection('Section 2', createItems(5)),
+            ],
+          })
+        );
 
         // No error for list length since each section has 5 items
         const listLengthErrors = analysis.errors.filter((e: any) => e.rule === 'LIST_LENGTH');
@@ -776,18 +791,15 @@ describe('BulletServer', () => {
       });
 
       it('should error when a single section has too many items', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Good Section',
-              items: createItems(5),
-            },
-            {
-              title: 'Overloaded Section',
-              items: createItems(12), // Too many
-            },
-          ],
-        });
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Good Section', createItems(5)),
+              createSection('Overloaded Section', createItems(12)), // Too many
+            ],
+          })
+        );
 
         // Should have error from the overloaded section
         const listLengthErrors = analysis.errors.filter((e: any) => e.rule === 'LIST_LENGTH');
@@ -796,14 +808,12 @@ describe('BulletServer', () => {
       });
 
       it('should prefix issues with section title', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'My Section',
-              items: createItems(12), // Will trigger error
-            },
-          ],
-        });
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [createSection('My Section', createItems(12))], // Will trigger error
+          })
+        );
 
         expect(analysis.errors[0].message).toContain('[My Section]');
       });
@@ -811,15 +821,13 @@ describe('BulletServer', () => {
 
     describe('Section Context Override', () => {
       it('should use global context by default', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Section 1',
-              items: createItems(5),
-            },
-          ],
-          context: 'presentation',
-        });
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [createSection('Section 1', createItems(5))],
+            context: 'presentation',
+          })
+        );
 
         // Section should inherit global context
         expect(analysis.section_scores[0].context).toBe('presentation');
@@ -827,21 +835,16 @@ describe('BulletServer', () => {
       });
 
       it('should allow per-section context override', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Document Section',
-              items: createItems(5),
-              context: 'document',
-            },
-            {
-              title: 'Presentation Section',
-              items: createItems(5),
-              context: 'presentation',
-            },
-          ],
-          context: 'reference', // Global default
-        });
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Document Section', createItems(5), { context: 'document' }),
+              createSection('Presentation Section', createItems(5), { context: 'presentation' }),
+            ],
+            context: 'reference', // Global default
+          })
+        );
 
         expect(analysis.section_scores[0].context).toBe('document');
         expect(analysis.section_scores[1].context).toBe('presentation');
@@ -850,26 +853,23 @@ describe('BulletServer', () => {
 
     describe('Section Scores', () => {
       it('should include per-section score breakdown', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Well Formed Section',
-              items: [
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Well Formed Section', [
                 { text: 'Use consistent grammar throughout the section' },
                 { text: 'Create parallel structure for better scanning' },
                 { text: 'Maintain readability with similar text forms' },
-              ],
-            },
-            {
-              title: 'Problematic Section',
-              items: [
+              ]),
+              createSection('Problematic Section', [
                 { text: 'short' },
                 { text: 'SHORT TWO' }, // inconsistent
                 { text: 'using gerund here instead of imperative' },
-              ],
-            },
-          ],
-        });
+              ]),
+            ],
+          })
+        );
 
         // First section should score higher
         expect(analysis.section_scores[0].score).toBeGreaterThan(
@@ -879,18 +879,18 @@ describe('BulletServer', () => {
       });
 
       it('should include grade per section', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Good Section',
-              items: [
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Good Section', [
                 { text: 'Use consistent grammar throughout the section' },
                 { text: 'Create parallel structure for better scanning' },
                 { text: 'Maintain readability with similar text forms' },
-              ],
-            },
-          ],
-        });
+              ]),
+            ],
+          })
+        );
 
         expect(analysis.section_scores[0].grade).toBeDefined();
         expect(['A', 'B', 'C', 'D', 'F']).toContain(analysis.section_scores[0].grade);
@@ -899,18 +899,15 @@ describe('BulletServer', () => {
 
     describe('Sectioned Summary', () => {
       it('should generate sectioned summary', async () => {
-        const analysis = await parseResult(server, {
-          sections: [
-            {
-              title: 'Section A',
-              items: createItems(5),
-            },
-            {
-              title: 'Section B',
-              items: createItems(5),
-            },
-          ],
-        });
+        const analysis = await parseResult(
+          server,
+          createInput({
+            sections: [
+              createSection('Section A', createItems(5)),
+              createSection('Section B', createItems(5)),
+            ],
+          })
+        );
 
         expect(analysis.summary).toContain('sections');
       });
