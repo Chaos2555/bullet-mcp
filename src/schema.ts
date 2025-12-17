@@ -135,7 +135,7 @@ export const BULLET_TOOL: Tool = {
               description: 'Optional context override for this section',
             },
           },
-          required: ['title', 'items'],
+          required: ['title', 'description', 'intro', 'items'],
         },
       },
       context: {
@@ -145,5 +145,6 @@ export const BULLET_TOOL: Tool = {
           'Usage context affects recommendations. Default: document. In sectioned mode, this is the default context (sections can override).',
       },
     },
+    required: ['title', 'description', 'intro'],
   },
 };
