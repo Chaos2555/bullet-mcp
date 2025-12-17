@@ -14,6 +14,7 @@ import type {
   RuleScore,
   SectionScore,
   Severity,
+  StructuredBulletList,
   ValidationIssue,
 } from './types.js';
 
@@ -168,11 +169,23 @@ export class BulletServer {
 
       // Detect mode: flat (items) vs sectioned (sections)
       if (bulletInput.sections && bulletInput.sections.length > 0) {
-        return this.analyzeSections(bulletInput.sections, globalContext);
+        return this.analyzeSections(
+          bulletInput.sections,
+          globalContext,
+          bulletInput.title,
+          bulletInput.description,
+          bulletInput.intro
+        );
       }
 
       // Flat mode - original behavior
-      return this.analyzeFlat(bulletInput.items!, globalContext);
+      return this.analyzeFlat(
+        bulletInput.items!,
+        globalContext,
+        bulletInput.title,
+        bulletInput.description,
+        bulletInput.intro
+      );
     } catch (error) {
       return {
         content: [
@@ -198,7 +211,10 @@ export class BulletServer {
    */
   private analyzeFlat(
     items: BulletItem[],
-    context: Context
+    context: Context,
+    title?: string,
+    description?: string,
+    intro?: string
   ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
     // Run all validators
     const scores: RuleScore[] = [
@@ -234,6 +250,9 @@ export class BulletServer {
 
     // Build analysis result
     const analysis: BulletAnalysis = {
+      ...(title && { title }),
+      ...(description && { description }),
+      ...(intro && { intro }),
       overall_score: overallScore,
       grade,
       scores: this.config.validation.enableResearchCitations
@@ -249,7 +268,7 @@ export class BulletServer {
       warnings,
       suggestions,
       summary: this.generateSummary(overallScore, errors.length, warnings.length),
-      top_improvements: this.getTopImprovements(allIssues),
+      top_improvements: this.getTopImprovements(allIssues, overallScore),
       item_count: items.length,
       max_depth: this.calculateMaxDepth(items),
       avg_line_length: this.calculateAvgLineLength(items),
@@ -267,7 +286,10 @@ export class BulletServer {
    */
   private analyzeSections(
     sections: BulletSection[],
-    globalContext: Context
+    globalContext: Context,
+    title?: string,
+    description?: string,
+    intro?: string
   ): { content: Array<{ type: string; text: string }>; isError?: boolean } {
     const sectionScores: SectionScore[] = [];
     const allRuleScores: RuleScore[] = [];
@@ -316,6 +338,8 @@ export class BulletServer {
 
       sectionScores.push({
         title: section.title,
+        ...(section.description && { description: section.description }),
+        ...(section.intro && { intro: section.intro }),
         score: sectionScore,
         grade: sectionGrade,
         item_count: section.items.length,
@@ -357,6 +381,9 @@ export class BulletServer {
 
     // Build analysis result
     const analysis: BulletAnalysis = {
+      ...(title && { title }),
+      ...(description && { description }),
+      ...(intro && { intro }),
       overall_score: overallScore,
       grade,
       scores: this.config.validation.enableResearchCitations
@@ -372,7 +399,7 @@ export class BulletServer {
       warnings: allWarnings,
       suggestions: allSuggestions,
       summary: this.generateSectionedSummary(overallScore, sections.length, sectionScores),
-      top_improvements: this.getTopImprovements([...allErrors, ...allWarnings, ...allSuggestions]),
+      top_improvements: this.getTopImprovements([...allErrors, ...allWarnings, ...allSuggestions], overallScore),
       item_count: totalItems,
       max_depth: allMaxDepth,
       avg_line_length: allLengths.length > 0 ? Math.round(allLengths.reduce((a, b) => a + b, 0) / allLengths.length) : 0,
@@ -1009,7 +1036,7 @@ export class BulletServer {
   /**
    * Get top 3 most impactful improvements
    */
-  private getTopImprovements(issues: ValidationIssue[]): string[] {
+  private getTopImprovements(issues: ValidationIssue[], score: number): StructuredBulletList {
     // Sort by severity (errors first, then warnings, then suggestions)
     const sorted = issues
       .filter((i) => i.suggestion)
@@ -1029,7 +1056,28 @@ export class BulletServer {
       if (unique.length >= 3) break;
     }
 
-    return unique;
+    return {
+      title: 'Suggested Improvements',
+      description: this.getImprovementDescription(score, unique.length),
+      intro: unique.length > 0 ? 'Consider the following changes:' : '',
+      items: unique,
+    };
+  }
+
+  /**
+   * Generate description for improvements based on score
+   */
+  private getImprovementDescription(score: number, itemCount: number): string {
+    if (itemCount === 0) {
+      return 'Your bullet list follows best practices.';
+    }
+    if (score >= 90) {
+      return 'Minor tweaks to make your bullet list even better.';
+    }
+    if (score >= 70) {
+      return 'A few adjustments would improve readability and recall.';
+    }
+    return 'These changes will significantly improve your bullet list.';
   }
 
   /**
