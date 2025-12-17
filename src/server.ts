@@ -250,9 +250,9 @@ export class BulletServer {
 
     // Build analysis result
     const analysis: BulletAnalysis = {
-      ...(title && { title }),
-      ...(description && { description }),
-      ...(intro && { intro }),
+      title: title!,
+      description: description!,
+      intro: intro!,
       overall_score: overallScore,
       grade,
       scores: this.config.validation.enableResearchCitations
@@ -338,8 +338,8 @@ export class BulletServer {
 
       sectionScores.push({
         title: section.title,
-        ...(section.description && { description: section.description }),
-        ...(section.intro && { intro: section.intro }),
+        description: section.description,
+        intro: section.intro,
         score: sectionScore,
         grade: sectionGrade,
         item_count: section.items.length,
@@ -381,9 +381,9 @@ export class BulletServer {
 
     // Build analysis result
     const analysis: BulletAnalysis = {
-      ...(title && { title }),
-      ...(description && { description }),
-      ...(intro && { intro }),
+      title: title!,
+      description: description!,
+      intro: intro!,
       overall_score: overallScore,
       grade,
       scores: this.config.validation.enableResearchCitations
@@ -485,6 +485,17 @@ export class BulletServer {
 
     const obj = input as Record<string, unknown>;
 
+    // Validate required fields: title, description, intro
+    if (typeof obj.title !== 'string' || obj.title.trim().length === 0) {
+      throw new Error('Must provide a non-empty "title" field');
+    }
+    if (typeof obj.description !== 'string' || obj.description.trim().length === 0) {
+      throw new Error('Must provide a non-empty "description" field');
+    }
+    if (typeof obj.intro !== 'string' || obj.intro.trim().length === 0) {
+      throw new Error('Must provide a non-empty "intro" field');
+    }
+
     // Check for either items or sections (but not both)
     const hasItems = obj.items && Array.isArray(obj.items);
     const hasSections = obj.sections && Array.isArray(obj.sections);
@@ -519,6 +530,12 @@ export class BulletServer {
         }
         if (typeof section.title !== 'string' || section.title.trim().length === 0) {
           throw new Error(`Section at index ${i} must have a non-empty title`);
+        }
+        if (typeof section.description !== 'string' || (section.description as string).trim().length === 0) {
+          throw new Error(`Section at index ${i} must have a non-empty description`);
+        }
+        if (typeof section.intro !== 'string' || (section.intro as string).trim().length === 0) {
+          throw new Error(`Section at index ${i} must have a non-empty intro`);
         }
         if (!section.items || !Array.isArray(section.items)) {
           throw new Error(`Section "${section.title}" must have an items array`);
